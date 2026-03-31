@@ -1,403 +1,275 @@
-"""
-머신러닝특론 HW1 - Feature Extraction (PCA & LDA)
-===================================================
-Python을 사용하여 PCA와 LDA를 직접 구현합니다.
-sklearn의 PCA, LDA 등 간편 라이브러리는 사용하지 않았습니다.
-"""
-
 import numpy as np
 import matplotlib.pyplot as plt
 import h5py
 
-# 한글 마이너스 기호 깨짐 방지
 plt.rcParams['axes.unicode_minus'] = False
 
-# 재현성을 위한 랜덤 시드 고정
+# 시드 고정 (매번 결과 똑같이 나오게 하려고 설정함)
 np.random.seed(42)
 
+'''
+[문제 1] 인공 데이터 생성 및 PCA/LDA 분석
+'''
 
-# =====================================================================
-# [문제 1] 인공 데이터에 대한 PCA와 LDA
-# =====================================================================
+# 1-(1) 데이터 생성 및 산점도 확인
+m1, m2 = np.array([0, 0]), np.array([0, 5])
+S = np.array([[10, 2], [2, 1]])
+n = 100
 
-# ----- 문제 1-(1): 두 클래스 데이터 생성 및 산점도 (10점) -----
+class1 = np.random.multivariate_normal(m1, S, n)
+class2 = np.random.multivariate_normal(m2, S, n)
 
-# 파라미터 설정 (과제에서 주어진 값)
-mu1 = np.array([0, 0])       # 클래스 1의 평균 벡터
-mu2 = np.array([0, 5])       # 클래스 2의 평균 벡터
-sigma = np.array([[10, 2],   # 두 클래스 공통 공분산 행렬
-                  [2, 1]])
-n_samples = 100              # 각 클래스 샘플 수
+print("--- [1-(1)] 데이터 생성 완료 ---")
+print("클래스1 평균:", class1.mean(0).round(3))
+print("클래스2 평균:", class2.mean(0).round(3))
 
-# 다변량 정규분포에서 데이터 생성
-# np.random.multivariate_normal()을 사용하면 평균과 공분산에 맞는 랜덤 데이터를 생성할 수 있다.
-# 처음에는 np.random.randn()으로 생성하고 Cholesky 분해를 곱하는 방법도 시도해봤는데,
-# multivariate_normal이 더 직관적이고 정확해서 이 방법을 사용했다.
-class1_data = np.random.multivariate_normal(mu1, sigma, n_samples)
-class2_data = np.random.multivariate_normal(mu2, sigma, n_samples)
-
-print(f"[문제1-(1)] 데이터 생성 완료")
-print(f"  Class 1: shape={class1_data.shape}, 샘플 평균={class1_data.mean(axis=0).round(3)}")
-print(f"  Class 2: shape={class2_data.shape}, 샘플 평균={class2_data.mean(axis=0).round(3)}")
-
-# 산점도
-plt.figure(figsize=(8, 6))
-plt.scatter(class1_data[:, 0], class1_data[:, 1],
-            c='blue', marker='o', alpha=0.6, edgecolors='k', linewidths=0.5,
-            label='Class 1')
-plt.scatter(class2_data[:, 0], class2_data[:, 1],
-            c='red', marker='o', alpha=0.6, edgecolors='k', linewidths=0.5,
-            label='Class 2')
-plt.xlim(-10, 10)  # 과제 조건: axis([-10 10 -5 10])
+plt.figure(figsize=(7, 5))
+plt.scatter(class1[:, 0], class1[:, 1], c='b', alpha=0.5, label='Class 1', s=25)
+plt.scatter(class2[:, 0], class2[:, 1], c='r', alpha=0.5, label='Class 2', s=25)
+plt.xlim(-10, 10)
 plt.ylim(-5, 10)
-plt.xlabel('Feature 1')
-plt.ylabel('Feature 2')
 plt.title('Sample Data')
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
+plt.xlabel('Feature 1'); plt.ylabel('Feature 2')
+plt.legend(); plt.grid(ls=':')
 plt.savefig('fig1_sample_data.png', dpi=150)
 plt.show()
 
 
-# ----- 문제 1-(2): PCA와 LDA 벡터 시각화 (20점) -----
+# 1-(2) PCA 및 LDA 고유벡터 계산
+X = np.vstack([class1, class2])
+X_mean = np.mean(X, axis=0)
+X_z = X - X_mean
 
-# === PCA 직접 구현 ===
-# PCA의 핵심: 데이터의 분산이 가장 큰 방향(=공분산 행렬의 고유벡터)을 찾는 것.
+# PCA: 공분산 행렬 기반 (수식대로 1/N 적용)
+cov = (X_z.T @ X_z) / X.shape[0]
+evals_p, evecs_p = np.linalg.eigh(cov)
+p_idx = np.argsort(evals_p)[::-1]
+evals_p = evals_p[p_idx]
+evecs_p = evecs_p[:, p_idx]
+v_pca = evecs_p[:, 0]
 
-# 전체 데이터 합치기
-X_all = np.vstack([class1_data, class2_data])  # (200, 2)
+print("\n--- [1-(2)] PCA 결과 ---")
+print("고유값:", evals_p)
+print("첫번째 주성분 방향:", v_pca)
+print("분산 설명 비율: %.1f%%" % (evals_p[0] / np.sum(evals_p) * 100))
 
-# 전체 평균 계산 및 중심화(centering)
-# 중심화: 데이터에서 평균을 빼는 것. PCA에서 반드시 필요한 전처리.
-mean_all = np.mean(X_all, axis=0)
-X_centered = X_all - mean_all
+# LDA: Within/Between Scatter Matrix 계산
+m1_sub, m2_sub = np.mean(class1, 0), np.mean(class2, 0)
+Sw = (class1 - m1_sub).T @ (class1 - m1_sub) + (class2 - m2_sub).T @ (class2 - m2_sub)
 
-# 공분산 행렬 계산
-# C = (1/N) * X_centered^T * X_centered
-# 처음에 np.cov()를 사용할까 고민했지만, np.cov()는 1/(N-1)로 나누는 표본 공분산이라
-# 수식과 정확히 일치시키기 위해 직접 계산했다.
-N = X_all.shape[0]
-cov_matrix = (1/N) * X_centered.T @ X_centered
+sb_m1 = (m1_sub - X_mean).reshape(-1, 1)
+sb_m2 = (m2_sub - X_mean).reshape(-1, 1)
+Sb = n * (sb_m1 @ sb_m1.T) + n * (sb_m2 @ sb_m2.T)
 
-# 고유값, 고유벡터 계산
-# eigh(): 대칭행렬(symmetric matrix) 전용 함수. 공분산 행렬은 항상 대칭이므로 적합.
-# eigh()는 고유값을 오름차순으로 반환하므로 내림차순 정렬 필요.
-eigenvalues_pca, eigenvectors_pca = np.linalg.eigh(cov_matrix)
-idx = np.argsort(eigenvalues_pca)[::-1]
-eigenvalues_pca = eigenvalues_pca[idx]
-eigenvectors_pca = eigenvectors_pca[:, idx]
+# Sw^-1 * Sb 풀기
+l_vals, l_vecs = np.linalg.eig(np.linalg.inv(Sw) @ Sb)
+l_sort = np.argsort(np.abs(l_vals))[::-1]
+l_vals = l_vals[l_sort]
+l_vecs = l_vecs[:, l_sort]
+v_lda = l_vecs[:, 0].real
 
-# PCA 첫 번째 주성분 벡터
-pc1 = eigenvectors_pca[:, 0]
+print("\n--- [1-(2)] LDA 결과 ---")
+print("고유값:", l_vals)
+print("첫번째 판별벡터 방향:", v_lda)
 
-print(f"\n[문제1-(2)] PCA 결과")
-print(f"  고유값: {eigenvalues_pca}")
-print(f"  1st PC 방향: {pc1}")
-print(f"  분산 설명 비율: {eigenvalues_pca[0]/np.sum(eigenvalues_pca)*100:.1f}%")
+# 벡터 시각화
+origin = X_mean
+scale = 5
 
-# === LDA 직접 구현 ===
-# LDA의 핵심: 클래스 간 분산(Sb)은 최대화, 클래스 내 분산(Sw)은 최소화하는 방향을 찾는 것.
-# 수학적으로는 Sw^(-1) * Sb의 고유벡터를 구한다.
+plt.figure(figsize=(7, 5))
+plt.scatter(class1[:, 0], class1[:, 1], c='b', alpha=0.3, s=15)
+plt.scatter(class2[:, 0], class2[:, 1], c='r', alpha=0.3, s=15)
 
-# 각 클래스 평균
-mean1 = np.mean(class1_data, axis=0)
-mean2 = np.mean(class2_data, axis=0)
-
-# Within-class Scatter Matrix (Sw): 클래스 내부의 분산
-# Sw = S1 + S2, 여기서 Si = (x - mean_i)^T * (x - mean_i)의 합
-diff1 = class1_data - mean1
-S1 = diff1.T @ diff1
-
-diff2 = class2_data - mean2
-S2 = diff2.T @ diff2
-
-Sw = S1 + S2
-
-# Between-class Scatter Matrix (Sb): 클래스 간의 분산
-# Sb = n1*(mean1-mean_total)*(mean1-mean_total)^T + n2*(mean2-mean_total)*(mean2-mean_total)^T
-n1, n2 = class1_data.shape[0], class2_data.shape[0]
-diff_mean1 = (mean1 - mean_all).reshape(-1, 1)
-diff_mean2 = (mean2 - mean_all).reshape(-1, 1)
-Sb = n1 * (diff_mean1 @ diff_mean1.T) + n2 * (diff_mean2 @ diff_mean2.T)
-
-# Sw^(-1) * Sb의 고유벡터
-Sw_inv = np.linalg.inv(Sw)
-eigenvalues_lda, eigenvectors_lda = np.linalg.eig(Sw_inv @ Sb)
-
-# 고유값 내림차순 정렬
-idx_lda = np.argsort(np.abs(eigenvalues_lda))[::-1]
-eigenvalues_lda = eigenvalues_lda[idx_lda]
-eigenvectors_lda = eigenvectors_lda[:, idx_lda]
-
-# LDA 첫 번째 판별 벡터
-lda1 = eigenvectors_lda[:, 0].real
-
-print(f"\n[문제1-(2)] LDA 결과")
-print(f"  고유값: {eigenvalues_lda}")
-print(f"  1st LDA 방향: {lda1}")
-
-# PCA & LDA 벡터를 산점도 위에 시각화
-origin = mean_all
-scale = 5  # 벡터 길이 스케일 (그래프에서 잘 보이도록)
-
-plt.figure(figsize=(8, 6))
-
-plt.scatter(class1_data[:, 0], class1_data[:, 1],
-            c='blue', marker='o', alpha=0.5, edgecolors='k', linewidths=0.3,
-            label='Class 1')
-plt.scatter(class2_data[:, 0], class2_data[:, 1],
-            c='red', marker='o', alpha=0.5, edgecolors='k', linewidths=0.3,
-            label='Class 2')
-
-# PCA 벡터 (초록색 화살표)
-plt.annotate('', xy=origin + scale * pc1, xytext=origin,
+plt.annotate('', xy=origin + scale * v_pca, xytext=origin,
              arrowprops=dict(arrowstyle='->', color='green', lw=2.5))
-plt.annotate('PCA 1st PC', xy=origin + scale * pc1,
+plt.annotate('PCA 1st PC', xy=origin + scale * v_pca,
              fontsize=10, color='green', fontweight='bold',
              xytext=(5, 5), textcoords='offset points')
 
-# LDA 벡터 (마젠타 화살표)
-plt.annotate('', xy=origin + scale * lda1, xytext=origin,
+plt.annotate('', xy=origin + scale * v_lda, xytext=origin,
              arrowprops=dict(arrowstyle='->', color='magenta', lw=2.5))
-plt.annotate('LDA 1st Vector', xy=origin + scale * lda1,
+plt.annotate('LDA 1st Vector', xy=origin + scale * v_lda,
              fontsize=10, color='magenta', fontweight='bold',
              xytext=(5, -15), textcoords='offset points')
 
 plt.xlim(-10, 10)
 plt.ylim(-5, 10)
-plt.xlabel('Feature 1')
-plt.ylabel('Feature 2')
-plt.title('PCA 1st Principal Component & LDA 1st Vector')
-plt.legend(loc='upper left')
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
+plt.title('PCA vs LDA Vector')
+plt.grid(ls=':')
 plt.savefig('fig2_pca_lda_vectors.png', dpi=150)
 plt.show()
 
 
-# ----- 문제 1-(3): PCA와 LDA 결과 비교 (10점) -----
-# 1차원 투영 결과를 히스토그램으로 비교
+# 1-(3) 1차원 투영 히스토그램 비교
+proj_p1, proj_p2 = class1 @ v_pca, class2 @ v_pca
+proj_l1, proj_l2 = class1 @ v_lda, class2 @ v_lda
 
-proj_pca_c1 = class1_data @ pc1
-proj_pca_c2 = class2_data @ pc1
+fig, ax = plt.subplots(2, 1, figsize=(8, 6))
+ax[0].hist(proj_p1, bins=15, alpha=0.5, color='b', label='Class 1')
+ax[0].hist(proj_p2, bins=15, alpha=0.5, color='r', label='Class 2')
+ax[0].set_title('PCA Projection (1D)')
+ax[0].legend(); ax[0].set_xlabel('Projected Value')
 
-proj_lda_c1 = class1_data @ lda1
-proj_lda_c2 = class2_data @ lda1
-
-fig, axes = plt.subplots(2, 1, figsize=(10, 6))
-
-axes[0].hist(proj_pca_c1, bins=20, alpha=0.6, color='blue', label='Class 1')
-axes[0].hist(proj_pca_c2, bins=20, alpha=0.6, color='red', label='Class 2')
-axes[0].set_title('PCA Projection (1D)')
-axes[0].legend()
-axes[0].set_xlabel('Projected Value')
-
-axes[1].hist(proj_lda_c1, bins=20, alpha=0.6, color='blue', label='Class 1')
-axes[1].hist(proj_lda_c2, bins=20, alpha=0.6, color='red', label='Class 2')
-axes[1].set_title('LDA Projection (1D)')
-axes[1].legend()
-axes[1].set_xlabel('Projected Value')
+ax[1].hist(proj_l1, bins=15, alpha=0.5, color='b', label='Class 1')
+ax[1].hist(proj_l2, bins=15, alpha=0.5, color='r', label='Class 2')
+ax[1].set_title('LDA Projection (1D)')
+ax[1].legend(); ax[1].set_xlabel('Projected Value')
 
 plt.tight_layout()
 plt.savefig('fig_projection_comparison.png', dpi=150)
 plt.show()
 
 
-# =====================================================================
-# [문제 2] COIL20 데이터에 대한 PCA와 LDA (총 60점)
-# =====================================================================
+'''
+[문제 2] COIL20 데이터셋 분석
+'''
 
-# ----- 데이터 로드 -----
-# HW1_COIL20.mat은 MATLAB v7.3 형식이라 scipy.io.loadmat으로는 안 열림.
-# 처음에 scipy.io.loadmat()을 사용했다가 에러가 나서, h5py로 바꿨다.
-# mat73 라이브러리도 있지만 h5py가 더 범용적이라 이것을 사용.
-
+# 데이터 로딩 (mat v7.3 버전이라 scipy 말고 h5py로 열어야 됨)
 with h5py.File('HW1_COIL20.mat', 'r') as f:
-    # mat 파일은 (features, samples) 형태로 저장됨 → 전치하여 (samples, features)로 변환
-    X_train = np.array(f['X']).T   # (280, 1024) - 학습 데이터
-    Y_train = np.array(f['Y']).flatten()  # (280,) - 학습 레이블
-    # Xt, Yt는 테스트 데이터 → 과제 조건에 따라 사용하지 않음
+    # 데이터가 (features, samples)로 되어있어서 전치함
+    X_raw = np.array(f['X']).T
+    Y_raw = np.array(f['Y']).flatten()
 
-print(f"\n[문제2] COIL20 데이터 로드 완료")
-print(f"  학습 데이터: {X_train.shape} (샘플 수 x 특징 수)")
-print(f"  클래스 수: {len(np.unique(Y_train))}, 클래스당 샘플: {X_train.shape[0]//20}")
+print("\n--- [2] COIL20 데이터 로드 완료 ---")
+print("데이터 크기:", X_raw.shape, "/ 클래스 수:", len(np.unique(Y_raw)), "개")
 
-# 샘플 이미지 확인 (어떤 데이터인지 눈으로 보기 위해)
-fig, axes = plt.subplots(2, 5, figsize=(12, 5))
+# 샘플 이미지 시각화
+plt.figure(figsize=(10, 4))
 for i in range(10):
-    ax = axes[i // 5, i % 5]
-    class_idx = np.where(Y_train == (i + 1))[0][0]
-    img = X_train[class_idx].reshape(32, 32)
-    ax.imshow(img, cmap='gray')
-    ax.set_title(f'Class {i+1}')
-    ax.axis('off')
-plt.suptitle('COIL20 Sample Images (Class 1~10)', fontsize=14)
-plt.tight_layout()
+    plt.subplot(2, 5, i+1)
+    img = X_raw[Y_raw == i+1][0].reshape(32, 32)
+    plt.imshow(img, cmap='gray'); plt.axis('off')
+    plt.title('Class ' + str(i+1))
+plt.suptitle('COIL20 Sample Images (Class 1~10)')
 plt.savefig('fig_coil20_samples.png', dpi=150)
 plt.show()
 
+# --- PCA 분석 ---
+x_c_mean = np.mean(X_raw, axis=0)
+x_centered = X_raw - x_c_mean
+c_cov = (x_centered.T @ x_centered) / X_raw.shape[0]
 
-# ----- COIL20 PCA 구현 -----
+evals_c, evecs_c = np.linalg.eigh(c_cov)
+s_idx = np.argsort(evals_c)[::-1]
+evals_c, evecs_c = evals_c[s_idx], evecs_c[:, s_idx]
 
-# 평균 계산 및 중심화
-mean_coil = np.mean(X_train, axis=0)
-X_centered_coil = X_train - mean_coil
+# 분산 설명 비율 확인 (95%)
+acc_var = np.cumsum(evals_c) / np.sum(evals_c)
+d_target = np.argmax(acc_var >= 0.95) + 1
 
-# 공분산 행렬 및 고유값 분해
-N_coil = X_train.shape[0]
-cov_coil = (1/N_coil) * X_centered_coil.T @ X_centered_coil
+print("\n--- [2] PCA 분석 결과 ---")
+print("2차원으로 줄였을때 정보보존율: %.1f%%" % (acc_var[1] * 100))
+print("95%% 보존하려면 %d개 주성분 필요 (원래 %d차원)" % (d_target, X_raw.shape[1]))
 
-eigenvalues_coil, eigenvectors_coil = np.linalg.eigh(cov_coil)
-
-# 내림차순 정렬
-idx_coil = np.argsort(eigenvalues_coil)[::-1]
-eigenvalues_coil = eigenvalues_coil[idx_coil]
-eigenvectors_coil = eigenvectors_coil[:, idx_coil]
-eigenvalues_coil = np.maximum(eigenvalues_coil, 0)  # 수치 오차로 인한 음수 제거
-
-# 정보보존율(누적 분산 비율) 계산
-total_variance = np.sum(eigenvalues_coil)
-cumulative_variance = np.cumsum(eigenvalues_coil) / total_variance * 100
-
-# 95%에 해당하는 주성분 수
-n_components_95 = np.argmax(cumulative_variance >= 95) + 1
-print(f"\n[문제2] PCA 정보보존율 95% → 필요한 주성분 수: {n_components_95}")
-print(f"  원래 차원: {X_train.shape[1]} → 축소 차원: {n_components_95}")
-
-# 누적 분산 비율 그래프
+# 누적 분산 그래프
 plt.figure(figsize=(8, 5))
-plt.plot(range(1, min(51, len(cumulative_variance)+1)),
-         cumulative_variance[:50], 'bo-', markersize=3)
-plt.axhline(y=95, color='r', linestyle='--', label='95% threshold')
-plt.axvline(x=n_components_95, color='g', linestyle='--',
-            label=f'{n_components_95} components')
+plt.plot(range(1, min(51, len(acc_var)+1)),
+         acc_var[:50] * 100, 'bo-', markersize=3)
+plt.axhline(y=95, color='r', linestyle='--', label='95%')
+plt.axvline(x=d_target, color='g', linestyle='--',
+            label=str(d_target) + ' components')
 plt.xlabel('Number of Principal Components')
 plt.ylabel('Cumulative Explained Variance (%)')
 plt.title('PCA Cumulative Explained Variance')
-plt.legend()
-plt.grid(True, alpha=0.3)
-plt.tight_layout()
+plt.legend(); plt.grid(ls=':')
 plt.savefig('fig_cumulative_variance.png', dpi=150)
 plt.show()
 
+# PCA 2D 시각화
+X_p_2d = x_centered @ evecs_c[:, :2]
 
-# ----- PCA 2차원 투영 -----
-
-W_pca_2d = eigenvectors_coil[:, :2]       # (1024, 2) 투영 행렬
-X_pca_2d = X_centered_coil @ W_pca_2d     # (280, 2) 투영된 데이터
-
-classes = np.unique(Y_train).astype(int)
+classes = np.unique(Y_raw).astype(int)
 colors = plt.cm.tab20(np.linspace(0, 1, 20))
 
 plt.figure(figsize=(10, 8))
 for i, cls in enumerate(classes):
-    mask = Y_train == cls
-    plt.scatter(X_pca_2d[mask, 0], X_pca_2d[mask, 1],
-                c=[colors[i]], marker='.', s=50, label=f'data{cls}')
+    mask = (Y_raw == cls)
+    plt.scatter(X_p_2d[mask, 0], X_p_2d[mask, 1],
+                c=[colors[i]], marker='.', s=50, label='data' + str(cls))
 plt.xlabel('1st Principal Component')
 plt.ylabel('2nd Principal Component')
 plt.title('COIL20 PCA 2-Dim')
 plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
-plt.grid(True, alpha=0.3)
+plt.grid(ls=':')
 plt.tight_layout()
 plt.savefig('fig3_coil20_pca_2d.png', dpi=150, bbox_inches='tight')
 plt.show()
 
 
-# ----- COIL20 LDA 구현 (PCA 95% 전처리 후) -----
-# 고차원(1024)에서 Sw가 특이행렬이 되는 문제를 해결하기 위해,
-# 먼저 PCA로 95% 정보보존 차원까지 축소한 뒤 LDA를 수행한다.
+# --- LDA 분석 ---
+# 고차원 Sw 역행렬 터지는 문제 방지를 위해 PCA로 선축소
+X_pca_pre = x_centered @ evecs_c[:, :d_target]
 
-# PCA 95% 차원 축소
-W_pca_95 = eigenvectors_coil[:, :n_components_95]
-X_pca_95 = X_centered_coil @ W_pca_95  # (280, n_components_95)
+m_total = np.mean(X_pca_pre, 0)
+sw_real = np.zeros((d_target, d_target))
+sb_real = np.zeros((d_target, d_target))
 
-n_features = X_pca_95.shape[1]
-n_classes = len(classes)
-mean_overall = np.mean(X_pca_95, axis=0)
+for c in classes:
+    xc = X_pca_pre[Y_raw == c]
+    mc = np.mean(xc, 0)
+    # Within
+    sw_real += (xc - mc).T @ (xc - mc)
+    # Between
+    mdiff = (mc - m_total).reshape(-1, 1)
+    sb_real += len(xc) * (mdiff @ mdiff.T)
 
-# Within-class & Between-class Scatter Matrix 계산
-Sw_coil = np.zeros((n_features, n_features))
-Sb_coil = np.zeros((n_features, n_features))
+# 역행렬 구할때 에러나서 작은 값 더해줌
+sw_real += np.eye(d_target) * 1e-6
+l_vals_c, l_vecs_c = np.linalg.eig(np.linalg.inv(sw_real) @ sb_real)
 
-for cls in classes:
-    X_cls = X_pca_95[Y_train == cls]
-    n_cls = X_cls.shape[0]
-    mean_cls = np.mean(X_cls, axis=0)
+l_idx_c = np.argsort(np.abs(l_vals_c.real))[::-1]
+l_vals_c = l_vals_c[l_idx_c].real
+l_vecs_c = l_vecs_c[:, l_idx_c].real
+v_lda_final = l_vecs_c[:, :2]
 
-    # Within-class scatter
-    diff = X_cls - mean_cls
-    Sw_coil += diff.T @ diff
+print("\n--- [2] LDA 결과 ---")
+print("상위 5개 고유값:", l_vals_c[:5].round(4))
+n_meaningful = np.sum(np.abs(l_vals_c) > 1e-10)
+print("의미있는 판별벡터:", n_meaningful, "개 (클래스수-1 = 19개가 최대)")
 
-    # Between-class scatter
-    diff_mean = (mean_cls - mean_overall).reshape(-1, 1)
-    Sb_coil += n_cls * (diff_mean @ diff_mean.T)
-
-# Sw^(-1) * Sb의 고유벡터 계산
-# Sw에 작은 epsilon을 더해 수치적 안정성 확보 (regularization)
-# 이 부분은 처음에 에러가 나서 찾아보다 알게 됨
-epsilon = 1e-6
-Sw_reg = Sw_coil + epsilon * np.eye(n_features)
-Sw_inv_Sb = np.linalg.inv(Sw_reg) @ Sb_coil
-
-eigenvalues_lda_coil, eigenvectors_lda_coil = np.linalg.eig(Sw_inv_Sb)
-
-# 내림차순 정렬
-idx_lda_coil = np.argsort(np.abs(eigenvalues_lda_coil.real))[::-1]
-eigenvalues_lda_coil = eigenvalues_lda_coil[idx_lda_coil].real
-eigenvectors_lda_coil = eigenvectors_lda_coil[:, idx_lda_coil].real
-
-print(f"\n[문제2] LDA 결과")
-print(f"  상위 5개 고유값: {eigenvalues_lda_coil[:5].round(4)}")
-print(f"  유의미한 판별 벡터 수: {np.sum(np.abs(eigenvalues_lda_coil) > 1e-10)} (최대 C-1=19)")
-
-# LDA 2차원 투영
-W_lda_2d = eigenvectors_lda_coil[:, :2]
-X_lda_2d = X_pca_95 @ W_lda_2d
+# LDA 2D 시각화
+X_l_2d = X_pca_pre @ v_lda_final
 
 plt.figure(figsize=(10, 8))
 for i, cls in enumerate(classes):
-    mask = Y_train == cls
-    plt.scatter(X_lda_2d[mask, 0], X_lda_2d[mask, 1],
-                c=[colors[i]], marker='.', s=50, label=f'data{cls}')
+    mask = (Y_raw == cls)
+    plt.scatter(X_l_2d[mask, 0], X_l_2d[mask, 1],
+                c=[colors[i]], marker='.', s=50, label='data' + str(cls))
 plt.xlabel('1st LDA Component')
 plt.ylabel('2nd LDA Component')
 plt.title('COIL20 LDA 2-Dim')
 plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8)
-plt.grid(True, alpha=0.3)
+plt.grid(ls=':')
 plt.tight_layout()
 plt.savefig('fig3_coil20_lda_2d.png', dpi=150, bbox_inches='tight')
 plt.show()
 
-
-# ----- PCA와 LDA 나란히 비교 -----
-
-fig, axes = plt.subplots(1, 2, figsize=(18, 7))
+# PCA vs LDA 비교 차트
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 7))
 
 for i, cls in enumerate(classes):
-    mask = Y_train == cls
-    axes[0].scatter(X_pca_2d[mask, 0], X_pca_2d[mask, 1],
-                    c=[colors[i]], marker='.', s=50, label=f'data{cls}')
-axes[0].set_xlabel('1st Principal Component')
-axes[0].set_ylabel('2nd Principal Component')
-axes[0].set_title('COIL20 PCA 2-Dim')
-axes[0].legend(bbox_to_anchor=(1.0, 1), loc='upper left', fontsize=7)
-axes[0].grid(True, alpha=0.3)
+    mask = (Y_raw == cls)
+    ax1.scatter(X_p_2d[mask, 0], X_p_2d[mask, 1],
+                c=[colors[i]], marker='.', s=50, label='data' + str(cls))
+ax1.set_xlabel('1st Principal Component')
+ax1.set_ylabel('2nd Principal Component')
+ax1.set_title('COIL20 PCA 2-Dim')
+ax1.legend(bbox_to_anchor=(1.0, 1), loc='upper left', fontsize=7)
+ax1.grid(ls=':')
 
 for i, cls in enumerate(classes):
-    mask = Y_train == cls
-    axes[1].scatter(X_lda_2d[mask, 0], X_lda_2d[mask, 1],
-                    c=[colors[i]], marker='.', s=50, label=f'data{cls}')
-axes[1].set_xlabel('1st LDA Component')
-axes[1].set_ylabel('2nd LDA Component')
-axes[1].set_title('COIL20 LDA 2-Dim')
-axes[1].legend(bbox_to_anchor=(1.0, 1), loc='upper left', fontsize=7)
-axes[1].grid(True, alpha=0.3)
+    mask = (Y_raw == cls)
+    ax2.scatter(X_l_2d[mask, 0], X_l_2d[mask, 1],
+                c=[colors[i]], marker='.', s=50, label='data' + str(cls))
+ax2.set_xlabel('1st LDA Component')
+ax2.set_ylabel('2nd LDA Component')
+ax2.set_title('COIL20 LDA 2-Dim')
+ax2.legend(bbox_to_anchor=(1.0, 1), loc='upper left', fontsize=7)
+ax2.grid(ls=':')
 
-plt.suptitle('COIL20 Feature Extraction: PCA vs LDA', fontsize=14, y=1.02)
+plt.suptitle('COIL20: PCA vs LDA', fontsize=14, y=1.02)
 plt.tight_layout()
 plt.savefig('fig3_coil20_pca_lda_comparison.png', dpi=150, bbox_inches='tight')
 plt.show()
 
-print("\n===== 모든 과제 수행 완료 =====")
+print("\n--- 과제 완료 ---")
