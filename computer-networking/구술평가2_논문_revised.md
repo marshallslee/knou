@@ -46,13 +46,13 @@ In this study, we propose a lossless Moving Target Defense (MTD) mechanism using
 
 본 연구를 진행하기에 앞서 MTD 기술 동향, SDN 및 P4 프로그래밍, 그리고 관련 보안 연구에 대한 문헌 조사를 수행하였다. 읽어본 논문 목록은 다음과 같다.
 
-- Jalowski 등[1]: "A Survey on Moving Target Defense for Networks: A Practical View"
-- 이수원 등[2]: "네트워크 보호체계에서 네트워크 주소변이 기술 적용에 대한 영향성 연구"
-- Bosshart 등[3]: "P4: Programming Protocol-Independent Packet Processors"
-- 조부승[4]: "P4 프로그래머블 네트워크를 통한 정책기반 인-네트워크 보안 관리 방법"
-- Hyder와 Fatima[5]: "Towards Crossfire Distributed Denial of Service Attack Protection Using Intent-Based Moving Target Defense Over Software-Defined Networking"
-- 김수연과 박태준[6]: "P4 기반 방화벽에 대한 연구"
-- 이승운과 노병희[7]: "SDN 모델링 및 시뮬레이션을 위한 Mininet과 OPNET 간 성능 비교 분석"
+- Jalowski 등[1]: A Survey on Moving Target Defense for Networks: A Practical View
+- 이수원 등[2]: 네트워크 보호체계에서 네트워크 주소변이 기술 적용에 대한 영향성 연구
+- Bosshart 등[3]: P4: Programming Protocol-Independent Packet Processors
+- 조부승[4]: P4 프로그래머블 네트워크를 통한 정책기반 인-네트워크 보안 관리 방법
+- Hyder와 Fatima[5]: Towards Crossfire Distributed Denial of Service Attack Protection Using Intent-Based Moving Target Defense Over Software-Defined Networking
+- 김수연과 박태준[6]: P4 기반 방화벽에 대한 연구
+- 이승운과 노병희[7]: SDN 모델링 및 시뮬레이션을 위한 Mininet과 OPNET 간 성능 비교 분석
 
 아래에서는 이 논문들의 내용을 정리하면서, 본 연구의 배경이 되는 내용을 설명하겠다.
 
